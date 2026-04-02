@@ -1,6 +1,6 @@
 # docker-claude-web-dev
 
-A Docker-based development environment for running the [Claude Code CLI](https://docs.anthropic.com/en/docs/claude-code) in isolated containers. It packages Ubuntu 24.04 with Node.js 22, Python 3, and a full Docker engine (Docker-in-Docker) so agents can develop and containerize web applications in a sandboxed environment.
+A Docker environment for running [Claude Code CLI](https://docs.anthropic.com/en/docs/claude-code) in an isolated container. Packages Ubuntu 24.04 with Node.js 22, Python 3, and a full Docker engine (Docker-in-Docker) so the agent can develop and containerize applications without touching the host.
 
 ## Prerequisites
 
@@ -9,99 +9,50 @@ A Docker-based development environment for running the [Claude Code CLI](https:/
 
 ## Quick Start
 
-Build the Docker image:
-
 ```bash
-./scripts/build.sh
+docker compose build
+docker compose run --rm claude
 ```
 
-## Usage
+This drops you into a bash shell inside the container. From there, run `claude` to start the CLI interactively, or `claude --dangerously-skip-permissions` for full auto mode.
 
-All run modes mount your project directory into `/workspace` inside the container. They default to the current working directory when no path is given.
-
-### Interactive Claude
+To mount a specific project directory:
 
 ```bash
-./scripts/claude.sh [project-path]
-```
-
-Launches the Claude Code CLI in interactive mode. You will be prompted for confirmation before Claude executes any action.
-
-### Auto / Yolo Mode
-
-```bash
-./scripts/claude-auto.sh [project-path]
-```
-
-Launches Claude with the `--dangerously-skip-permissions` flag. This skips **all** permission prompts -- Claude can execute any action without confirmation.
-
-> **Warning:** Only use auto mode with code you fully trust. See the Security Model section below.
-
-### Shell
-
-```bash
-./scripts/shell.sh [project-path]
-```
-
-Opens an interactive bash shell inside the container for manual exploration.
-
-### Docker Compose
-
-```bash
-# Interactive session
-docker compose run --rm claude claude
-
-# Auto mode
-docker compose run --rm claude yolo-claude
-
-# Mount a specific project
-PROJECT_PATH=/path/to/project docker compose run --rm claude claude
-
-# Safe mode (no Docker access inside container)
-docker compose -f docker-compose.safe.yml run --rm claude claude
+PROJECT_PATH=/path/to/project docker compose run --rm claude
 ```
 
 ## Security Model
 
 ### Docker-in-Docker Isolation
 
-This environment uses **true Docker-in-Docker**: a Docker daemon runs inside the container. Any containers the agent creates are **nested** within the outer container, not siblings on your host. This means:
+This environment uses **true Docker-in-Docker**: a separate Docker daemon runs inside the container. Any containers the agent creates are **nested** within the outer container, not siblings on your host. This means:
 
-- The agent **cannot** access your host's Docker daemon.
-- The agent **cannot** mount your host filesystem via Docker.
+- The agent **cannot** access your host's Docker daemon or filesystem (beyond the mounted workspace).
 - Nested containers are destroyed when the outer container exits.
-- Mistakes and experiments stay fully contained.
+- `--privileged` is required for the nested Docker daemon to manage cgroups/namespaces — it does not expose the host's Docker daemon.
 
-The `--privileged` flag is required to allow the nested Docker daemon to manage cgroups and namespaces. This grants elevated kernel capabilities **inside the container** but does not expose the host's Docker daemon.
+### Full Auto Mode
 
-### Auto Mode
-
-The `--dangerously-skip-permissions` flag disables Claude's built-in safety prompts. Inside the DinD environment this is relatively safe — the agent has full control over the container, but cannot escape to the host. This is the intended use case: a sandboxed environment where the agent can work freely.
-
-### Safe Mode (No Docker)
-
-Use `docker-compose.safe.yml` or set `SKIP_DOCKER=1` to run without Docker capabilities inside the container. The agent can still write code and run tests, but cannot build or run containers. Useful for code-only tasks on untrusted repositories.
+Running `claude --dangerously-skip-permissions` inside the container is safe — the agent has full control over the container but cannot escape to the host. The only host path it can modify is the workspace you explicitly mounted.
 
 ### Sudo Access
 
-The `claude` user has restricted sudo access for:
+The `claude` user has restricted sudo for exactly three commands:
 - `dockerd` — starting the nested Docker daemon
 - `groupmod` — fixing group IDs at startup
 - `chown` — fixing file ownership on mounted volumes
 
 ## Architecture
 
-| File / Directory | Purpose |
+| File | Purpose |
 |---|---|
-| `Dockerfile` | Ubuntu 24.04 image with Node.js 22, Python 3, full Docker engine, and Claude CLI. |
-| `entrypoint.sh` | Starts the nested Docker daemon and fixes auth directory ownership. |
-| `scripts/` | Host-side convenience scripts. These run on the host, not inside the container. |
-| `auth/` | Mounted as `/home/claude/.claude` to persist auth tokens. Gitignored. |
-| `docker-compose.yml` | Standard DinD setup with `--privileged`. |
-| `docker-compose.safe.yml` | No-Docker mode without `--privileged`. |
+| `Dockerfile` | Ubuntu 24.04 + Node.js 22 + Python 3 + Docker engine + Claude CLI |
+| `entrypoint.sh` | Starts the nested Docker daemon and fixes auth directory ownership |
+| `docker-compose.yml` | DinD setup with `--privileged` |
+| `auth/` | Mounted as `/home/claude/.claude` to persist auth tokens (gitignored) |
 
 ## Notes
 
-- `scripts/` is in `.dockerignore` because the scripts only run on the host.
 - Auth tokens in `auth/` are gitignored. Never commit credentials.
-- Set `SKIP_DOCKER=1` env var to skip Docker daemon startup inside the container.
+- Set `SKIP_DOCKER=1` env var to skip Docker daemon startup if you don't need Docker inside the container.

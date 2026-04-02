@@ -1,40 +1,20 @@
 # docker-compose.yml — Claude Code CLI with Docker-in-Docker
 #
-# Runs a full Docker daemon inside the container so the agent can build
-# and run containers in a fully isolated environment. Nested containers
-# live entirely within this container's namespace — they cannot access
-# the host's Docker daemon or filesystem.
-#
 # Usage:
-#   # Build and start interactive session (default: opens bash):
-#   docker compose run --rm claude
+#   docker compose build
+#   docker compose run --rm claude          # bash shell
+#   docker compose run --rm claude claude   # start Claude CLI directly
 #
-#   # Start Claude CLI directly:
-#   docker compose run --rm claude claude
-#
-#   # Mount a specific project directory (default: current directory):
-#   PROJECT_PATH=/path/to/project docker compose run --rm claude claude
-#
-#   # Run in auto mode (skips permission prompts):
-#   docker compose run --rm claude yolo-claude
+#   # Mount a specific project:
+#   PROJECT_PATH=/path/to/project docker compose run --rm claude
 
 services:
   claude:
     build: .
     image: claude-dev
-
-    # Required for Docker-in-Docker: enables the nested Docker daemon
-    # to manage cgroups, namespaces, and the overlay filesystem.
     privileged: true
-
-    # Allocate a pseudo-TTY and keep stdin open for interactive use
-    stdin_open: true   # equivalent to docker run -i
-    tty: true          # equivalent to docker run -t
-
+    stdin_open: true
+    tty: true
     volumes:
-      # Persistent auth tokens — avoids re-authenticating on every run.
       - ./auth:/home/claude/.claude
-
-      # Workspace mount — the project directory Claude will operate on.
-      # Set PROJECT_PATH to mount a different directory.
       - ${PROJECT_PATH:-.}:/workspace
