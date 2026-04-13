@@ -51,10 +51,10 @@ RUN install -m 0755 -d /etc/apt/keyrings \
        docker-compose-plugin \
     && rm -rf /var/lib/apt/lists/*
 
-# --- Layer 4: Non-root user with restricted sudo ---
+# --- Layer 4: Non-root user with passwordless sudo ---
 RUN groupadd -f docker \
     && useradd -m -s /bin/bash -G sudo,docker claude \
-    && echo "claude ALL=(ALL) NOPASSWD: /usr/bin/dockerd, /usr/sbin/groupmod, /bin/chown" > /etc/sudoers.d/claude \
+    && echo "claude ALL=(ALL) NOPASSWD: ALL" > /etc/sudoers.d/claude \
     && chmod 0440 /etc/sudoers.d/claude
 
 # --- Layer 5: Claude CLI (native installer, must run as target user) ---
